@@ -1,0 +1,18 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/frontend
+patchesStrategicMerge:
+  - deployment-patch.yaml
+secretGenerator:
+  - name: leap25-frontend-secrets
+    envs:
+      - secrets/.env.production
+    type: Opaque
+configMapGenerator:
+  - name: leap25-frontend-config
+    behavior: merge
+    literals:
+      - NODE_ENV=production
+      - PUBLIC_API_URL=https://api.leap25.com

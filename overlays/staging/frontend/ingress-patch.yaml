@@ -1,0 +1,21 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: leap25-frontend-ingress
+spec:
+  tls:
+    - hosts:
+        - staging.leap25.com
+      secretName: staging-leap25-frontend-tls
+  rules:
+    - host: staging.leap25.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: staging-leap25-frontend
+                port:
+                  number: 80

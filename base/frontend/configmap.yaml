@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: leap25-frontend-config
+data:
+  NODE_ENV: "production"

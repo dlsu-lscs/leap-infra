@@ -1,0 +1,15 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leap25-backend
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: leap25-backend
+          resources:
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

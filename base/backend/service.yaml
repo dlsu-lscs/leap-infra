@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: leap25-backend
+spec:
+  selector:
+    app: leap25-backend
+  ports:
+    - port: 80
+      targetPort: 3000
+  type: ClusterIP

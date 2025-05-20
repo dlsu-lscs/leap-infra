@@ -1,0 +1,20 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: leap25-db-migration
+  annotations:
+    kustomize.toolkit.fluxcd.io/prune: "true"
+spec:
+  ttlSecondsAfterFinished: 300
+  template:
+    spec:
+      containers:
+        - name: migrations
+          image: ghcr.io/dlsu-lscs/leap25-backend:latest
+          command: ["node", "dist/migrations/run-migrations.js"]
+          envFrom:
+            - secretRef:
+                name: leap25-backend-secrets
+      restartPolicy: Never
+  backoffLimit: 3

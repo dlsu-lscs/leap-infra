@@ -1,0 +1,19 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../../base/backend
+patchesStrategicMerge:
+  - deployment-patch.yaml
+  - ingress-patch.yaml
+secretGenerator:
+  - name: leap25-backend-secrets
+    envs:
+      - secrets/.env.staging
+    type: Opaque
+configMapGenerator:
+  - name: leap25-backend-config
+    behavior: merge
+    literals:
+      - NODE_ENV=staging
+      - CORS_ORIGIN=https://staging.leap25.com

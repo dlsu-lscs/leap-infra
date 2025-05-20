@@ -1,0 +1,44 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leap25-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: leap25-backend
+  template:
+    metadata:
+      labels:
+        app: leap25-backend
+    spec:
+      containers:
+        - name: leap25-backend
+          image: ghcr.io/dlsu-lscs/leap25-backend:latest
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: leap25-backend-config
+            - secretRef:
+                name: leap25-backend-secrets
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 10

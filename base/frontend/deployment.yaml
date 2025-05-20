@@ -1,0 +1,32 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: leap25-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: leap25-frontend
+  template:
+    metadata:
+      labels:
+        app: leap25-frontend
+    spec:
+      containers:
+        - name: leap25-frontend
+          image: ghcr.io/dlsu-lscs/leap25-frontend:latest
+          ports:
+            - containerPort: 80
+          envFrom:
+            - configMapRef:
+                name: leap25-frontend-config
+            - secretRef:
+                name: leap25-frontend-secrets
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "300m"
+              memory: "256Mi"
