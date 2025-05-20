@@ -1,0 +1,9 @@
+do_token = "your_digital_ocean_api_token"
+environment = "staging"
+region = "nyc3"
+kubernetes_version = "1.27.4-do.0"
+node_size = "s-2vcpu-4gb"
+min_nodes = 2
+max_nodes = 5
+db_size = "db-s-1vcpu-1gb"
+redis_size = "db-s-1vcpu-1gb"
