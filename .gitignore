@@ -1,0 +1,25 @@
+# Ignore Terraform state files
+*.tfstate
+*.tfstate.backup
+*.tfplan
+.terraform/
+.terraform.lock.hcl
+
+# Ignore local env files
+terraform.tfvars
+
+# Ignore plain text secrets
+overlays/*/*/secrets/.env.*
+
+# Ensure sealed secrets are committed
+!overlays/*/*/secrets/.sealedenv.*.yaml
+
+# Ignore kubeseal certificate
+.kubeseal-cert.pem
+
+# Ignore temporary files
+*.swp
+*.swo
+*~
+
+**/.env.*
