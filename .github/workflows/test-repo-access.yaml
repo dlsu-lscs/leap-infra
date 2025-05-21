@@ -7,7 +7,7 @@ on:
       target_repo:
         description: 'Target repository to test access (default: same repo)'
         required: false
-        default: '${{ github.repository }}'
+        default: 'dlsu-lscs/leap-infra'
   repository_dispatch:
     types: [test-event]
 
