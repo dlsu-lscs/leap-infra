@@ -43,7 +43,7 @@ jobs:
       # Handle migrations if needed
       - name: Download migrations
         if: github.event.client_payload.has_migrations == true
-        uses: dawidd6/action-download-artifact@v2
+        uses: dawidd6/action-download-artifact@v9
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           workflow: build-push-deploy.yml
