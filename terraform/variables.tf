@@ -4,11 +4,17 @@ variable "do_token" {
   sensitive   = true
 }
 
+variable "pvt_key" {
+  description = "Private SSH Key path"
+  type        = string
+  sensitive   = true
+}
+
 variable "environment" {
   description = "Deployment environment (staging or production)"
   type        = string
-  default     = "staging"
-  
+  default     = "production"
+
   validation {
     condition     = contains(["staging", "production"], var.environment)
     error_message = "Environment must be either 'staging' or 'production'."
@@ -18,13 +24,13 @@ variable "environment" {
 variable "region" {
   description = "Digital Ocean region"
   type        = string
-  default     = "nyc3"
+  default     = "sgp1"
 }
 
 variable "kubernetes_version" {
   description = "Kubernetes version"
   type        = string
-  default     = "1.27.4-do.0"
+  default     = "1.32.2-do.1"
 }
 
 variable "node_size" {

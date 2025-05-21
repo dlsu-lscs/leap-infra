@@ -1,16 +1,15 @@
-; TODO: see config docs for digitalocean 
 terraform {
   required_providers {
     digitalocean = {
-      source = "digitalocean/digitalocean"
+      source  = "digitalocean/digitalocean"
       version = "~> 2.30.0"
     }
     kubernetes = {
-      source = "hashicorp/kubernetes"
+      source  = "hashicorp/kubernetes"
       version = "~> 2.23.0"
     }
     helm = {
-      source = "hashicorp/helm"
+      source  = "hashicorp/helm"
       version = "~> 2.11.0"
     }
   }
@@ -20,12 +19,17 @@ provider "digitalocean" {
   token = var.do_token
 }
 
+data "digitalocean_ssh_key" "terraform" {
+  name = "seraphim-key"
+}
+
 # Create a Digital Ocean Kubernetes cluster
 resource "digitalocean_kubernetes_cluster" "leap25_cluster" {
-  name     = "leap25-${var.environment}"
-  region   = var.region
-  version  = var.kubernetes_version
-  
+  name    = "leap25-${var.environment}"
+  region  = var.region
+  version = var.kubernetes_version
+  ha      = true
+
   node_pool {
     name       = "worker-pool"
     size       = var.node_size
@@ -57,7 +61,7 @@ resource "digitalocean_database_cluster" "mysql" {
   version    = "8"
   size       = var.db_size
   region     = var.region
-  node_count = var.environment == "production" ? 2 : 1
+  node_count = var.environment == "production" ? 1 : 1 # make 2 if have money lol
 }
 
 # Create a database
@@ -75,38 +79,73 @@ resource "digitalocean_database_user" "leap25_user" {
 # Create a Redis cluster
 resource "digitalocean_database_cluster" "redis" {
   name       = "leap25-redis-${var.environment}"
-  engine     = "redis"
-  version    = "7"
+  engine     = "valkey"
+  version    = "8"
   size       = var.redis_size
   region     = var.region
-  node_count = var.environment == "production" ? 2 : 1
+  node_count = var.environment == "production" ? 1 : 1 # make 2 if have money
 }
 
 # Install ingress-nginx with Helm
 resource "helm_release" "ingress_nginx" {
-  name       = "ingress-nginx"
-  repository = "https://kubernetes.github.io/ingress-nginx"
-  chart      = "ingress-nginx"
-  namespace  = "ingress-nginx"
+  name             = "ingress-nginx"
+  repository       = "https://kubernetes.github.io/ingress-nginx"
+  chart            = "ingress-nginx"
+  namespace        = "ingress-nginx"
   create_namespace = true
-  
+
   set {
     name  = "controller.service.type"
     value = "LoadBalancer"
+  }
+
+  # Optimize for high traffic
+  set {
+    name  = "controller.resources.requests.cpu"
+    value = "200m"
+  }
+
+  set {
+    name  = "controller.resources.requests.memory"
+    value = "256Mi"
+  }
+
+  set {
+    name  = "controller.resources.limits.cpu"
+    value = "500m"
+  }
+
+  set {
+    name  = "controller.resources.limits.memory"
+    value = "512Mi"
   }
 }
 
 # Install cert-manager with Helm
 resource "helm_release" "cert_manager" {
-  name       = "cert-manager"
-  repository = "https://charts.jetstack.io"
-  chart      = "cert-manager"
-  namespace  = "cert-manager"
+  name             = "cert-manager"
+  repository       = "https://charts.jetstack.io"
+  chart            = "cert-manager"
+  namespace        = "cert-manager"
   create_namespace = true
-  
+
   set {
     name  = "installCRDs"
     value = "true"
+  }
+}
+
+# Install MySQL Operator for Kubernetes (free)
+resource "helm_release" "mysql_operator" {
+  name             = "mysql-operator"
+  repository       = "https://mysql.github.io/mysql-operator"
+  chart            = "mysql-operator"
+  namespace        = "mysql-operator"
+  create_namespace = true
+
+  set {
+    name  = "replicas"
+    value = "1"
   }
 }
 
@@ -124,7 +163,7 @@ output "kubernetes_cluster_name" {
 }
 
 output "kubernetes_endpoint" {
-  value = digitalocean_kubernetes_cluster.leap25_cluster.endpoint
+  value     = digitalocean_kubernetes_cluster.leap25_cluster.endpoint
   sensitive = true
 }
 
@@ -165,4 +204,29 @@ output "redis_port" {
 output "redis_password" {
   value     = digitalocean_database_cluster.redis.password
   sensitive = true
+}
+
+# Output LoadBalancer IP (for DNS configuration)
+output "load_balancer_ip" {
+  value = <<-EOT
+    To get LoadBalancer IP after deployment:
+    kubectl get service -n ingress-nginx ingress-nginx-controller -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+  EOT
+}
+
+output "backend_db_connection_string" {
+  value       = "mysql://${digitalocean_database_user.leap25_user.name}:${digitalocean_database_user.leap25_user.password}@${digitalocean_database_cluster.mysql.host}:${digitalocean_database_cluster.mysql.port}/${digitalocean_database_db.leap25_db.name}"
+  sensitive   = true
+  description = "MySQL connection string for backend service"
+}
+
+output "backend_redis_connection_string" {
+  value       = "redis://default:${digitalocean_database_cluster.redis.password}@${digitalocean_database_cluster.redis.host}:${digitalocean_database_cluster.redis.port}"
+  sensitive   = true
+  description = "Redis/Valkey connection string for backend service"
+}
+
+output "kubernetes_internal_backend_url" {
+  value       = "${var.environment == "production" ? "http://leap25-backend" : "http://staging-leap25-backend"}.default.svc.cluster.local"
+  description = "Kubernetes internal URL for backend service"
 }
