@@ -40,7 +40,6 @@ jobs:
           echo "Environment: ${{ steps.env.outputs.name }}"
           echo "Prefix: ${{ steps.env.outputs.prefix }}"
 
-      # Handle migrations if needed
       - name: Download migrations
         if: github.event.client_payload.has_migrations == true
         uses: dawidd6/action-download-artifact@v9

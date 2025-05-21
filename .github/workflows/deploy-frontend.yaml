@@ -1,0 +1,73 @@
+---
+name: Deploy Frontend
+
+on:
+  repository_dispatch:
+    types: [frontend-update]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout infrastructure
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.32.2"
+
+      - name: Set up Kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: "5.6.0"
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.event.client_payload.branch }}" == "main" ]; then
+            echo "name=production" >> $GITHUB_OUTPUT
+            echo "prefix=" >> $GITHUB_OUTPUT
+          else
+            echo "name=staging" >> $GITHUB_OUTPUT
+            echo "prefix=staging-" >> $GITHUB_OUTPUT
+          fi
+          echo "Environment: ${{ steps.env.outputs.name }}"
+          echo "Prefix: ${{ steps.env.outputs.prefix }}"
+
+      - name: Update frontend image reference
+        run: |
+          echo "Updating frontend image reference for ${{ steps.env.outputs.name }} to ${{ github.event.client_payload.image }}"
+          cd overlays/${{ steps.env.outputs.name }}/frontend
+          kustomize edit set image ghcr.io/dlsu-lscs/leap-2025=${{ github.event.client_payload.image }}
+          cd ../../../
+
+      - name: Deploy frontend application
+        timeout-minutes: 5
+        run: |
+          echo "Deploying frontend to ${{ steps.env.outputs.name }} environment"
+
+          # apply updated frontend deployment
+          kubectl apply -k overlays/${{ steps.env.outputs.name }}/frontend
+
+          echo "Waiting for deployment rollout..."
+          kubectl rollout status deployment/${{ steps.env.outputs.prefix }}leap25-frontend --timeout=300s
+
+          echo "Frontend deployment completed successfully"
+
+      - name: Notify deployment success
+        if: success()
+        run: |
+          echo "Frontend deployment to ${{ steps.env.outputs.name }} completed successfully"
+          # add notification integration (Slack, Teams, etc.)
+
+      - name: Notify deployment failure
+        if: failure()
+        run: |
+          echo "Frontend deployment to ${{ steps.env.outputs.name }} failed"
+          # add notification integration (Slack, Teams, etc.)

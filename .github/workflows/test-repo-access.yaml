@@ -1,0 +1,111 @@
+---
+name: Test Repo Access Token
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: 'Target repository to test access (default: same repo)'
+        required: false
+        default: '${{ github.repository }}'
+  repository_dispatch:
+    types: [test-event]
+
+jobs:
+  test-repo-access-token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Direct API test using curl (when manually triggered)
+      - name: Test token using direct API call
+        if: github.event_name == 'workflow_dispatch'
+        id: curl_test
+        run: |
+          echo "Testing REPO_ACCESS_TOKEN via direct API call..."
+
+          # Create a temporary file for the payload
+          cat > payload.json << EOF
+          {
+            "event_type": "test-event",
+            "client_payload": {
+              "source": "${{ github.repository }}",
+              "test_id": "${{ github.run_id }}",
+              "timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            }
+          }
+          EOF
+
+          # Perform the API call with detailed output
+          HTTP_STATUS=$(curl -s -o response.txt -w "%{http_code}" \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{ github.event.inputs.target_repo }}/dispatches \
+            -d @payload.json)
+
+          echo "HTTP Status: $HTTP_STATUS"
+
+          # Display response for debugging (if error)
+          if [ "$HTTP_STATUS" != "204" ]; then
+            echo "Error Response:"
+            cat response.txt
+            echo ""
+            echo "❌ Token verification failed. Status code: $HTTP_STATUS"
+            exit 1
+          else
+            echo "✅ REPO_ACCESS_TOKEN successfully verified!"
+            echo "Repository dispatch event successfully sent to ${{ github.event.inputs.target_repo }}"
+          fi
+
+          # Clean up
+          rm payload.json response.txt
+
+      # Alternative test using the GitHub Action
+      - name: Test token using GitHub Action
+        if: github.event_name == 'workflow_dispatch'
+        id: action_test
+        uses: peter-evans/repository-dispatch@v2
+        with:
+          token: ${{ secrets.REPO_ACCESS_TOKEN }}
+          repository: ${{ github.event.inputs.target_repo }}
+          event-type: test-event
+          client-payload: |
+            {
+              "source": "${{ github.repository }}",
+              "test_method": "github_action",
+              "test_id": "${{ github.run_id }}"
+            }
+
+      # This section runs when triggered by repository_dispatch from another repo
+      - name: Handle incoming test event
+        if: github.event_name == 'repository_dispatch'
+        id: event_handler
+        run: |
+          echo "✅ Successfully received test event!"
+          echo "Event data:"
+          echo "Source repository: ${{ github.event.client_payload.source || 'Not specified' }}"
+          echo "Test ID: ${{ github.event.client_payload.test_id || 'Not specified' }}"
+          echo "Timestamp: ${{ github.event.client_payload.timestamp || 'Not specified' }}"
+          echo "Test method: ${{ github.event.client_payload.test_method || 'curl' }}"
+          echo "Sender: ${{ github.event.sender.login }}"
+          echo ""
+          echo "Access verification successful - repository ${{ github.event.sender.login }} can trigger workflows in this repository"
+
+          # Set output for use in notification step
+          echo "result=Repository ${{ github.event.sender.login }} successfully triggered this workflow with REPO_ACCESS_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: Notify test result
+        run: |
+          if [ "${{ github.event_name }}" == "repository_dispatch" ]; then
+            echo "${{ steps.event_handler.outputs.result }}"
+          else
+            echo "Test completed successfully."
+            echo "- Direct API test: ✅ Passed"
+            echo "- GitHub Action test: ✅ Passed"
+            echo ""
+            echo "Check ${{ github.event.inputs.target_repo }} for triggered workflows."
+          fi
+          # Could add further notification integrations (Slack, Teams, etc.)
