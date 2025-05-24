@@ -27,3 +27,4 @@ overlays/*/*/secrets/.env.*
 !**/.env.*.example
 !**/.env.example
 *.log
+*.crt
