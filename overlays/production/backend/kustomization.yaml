@@ -3,15 +3,20 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../../base/backend
-patchesStrategicMerge:
+  - ./secrets/.sealedenv.production.yaml
+patches:
   - deployment-patch.yaml
 secretGenerator:
-  - name: leap25-backend-secrets
-    envs:
+  - envs:
       - secrets/.env.production
+    name: leap25-backend-secrets
     type: Opaque
 configMapGenerator:
-  - name: leap25-backend-config
-    behavior: merge
+  - behavior: merge
     literals:
       - NODE_ENV=production
+    name: leap25-backend-config
+images:
+  - name: ghcr.io/dlsu-lscs/leap25-backend
+    newName: ghcr.io/dlsu-lscs/leap25-backend
+    newTag: latest
