@@ -4,4 +4,21 @@ kind: Deployment
 metadata:
   name: leap25-frontend
 spec:
-  replicas: 2
+  # initial replica count (1) --> will be be managed by HPA
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    spec:
+      containers:
+        - name: leap25-frontend
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "256Mi"
+            limits:
+              cpu: "400m"
+              memory: "512Mi"

@@ -4,5 +4,7 @@ kind: Kustomization
 resources:
   - backend
   - frontend
+  - hpa/backend-hpa.yaml
+  - hpa/frontend-hpa.yaml
 commonLabels:
   environment: production

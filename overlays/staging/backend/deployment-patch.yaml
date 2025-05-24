@@ -4,12 +4,16 @@ kind: Deployment
 metadata:
   name: leap25-backend
 spec:
+  # initial replica count (2) --> will be be managed by HPA
   replicas: 2
   template:
     spec:
       containers:
         - name: leap25-backend
           resources:
+            requests:
+              cpu: "400m"
+              memory: "384Mi"
             limits:
-              cpu: "500m"
-              memory: "512Mi"
+              cpu: "800m"
+              memory: "768Mi"

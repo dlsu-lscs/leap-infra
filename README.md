@@ -224,21 +224,6 @@ The infrastructure uses ingress-nginx as the Ingress Controller:
 
 ## Database Migrations
 
-migrations for leap infra:
-
-┌─────────────────┐     ┌─────────────────┐     ┌──────────────────┐
-│  Migration Job  │────▶│  Database Ready │────▶│ Application Pods │
-│    (one-time)   │     │     Signal      │     │     (scaled)     │
-└─────────────────┘     └─────────────────┘     └──────────────────┘
-
-qs for migrations:
-- no need to run the migrations in config/database.ts?
-- when want to run another migrations (like db/model change for example), we just create a .sql file inside the migrations folder? Then will the kubernetes job auto run the run-migrations script?
-
-- for the caching middleware (Cache-Control header), how does it work really?
-
-- if the database is a managed database (from digital ocean), how do i ensure that the job for running migrations is run from my kubernetes (digital ocean kubernetes)? Also since i have managed redis also, how does this connect? 
-
 ### Running Migrations Manually
 
 While CI/CD handles migrations automatically during deployments, you can run them manually:
@@ -251,7 +236,8 @@ While CI/CD handles migrations automatically during deployments, you can run the
 ./scripts/apply.sh production migrations sha-YOUR_COMMIT_HASH
 ```
 
-**Important**: Always specify the correct image tag (commit SHA) when running migrations to ensure compatibility with your database schema.
+> [!IMPORTANT]
+> Always specify the correct image tag (commit SHA) when running migrations to ensure compatibility with your database schema.
 
 ### Migration Process
 
@@ -297,5 +283,5 @@ cd terraform
 terraform destroy
 ```
 
-**Warning**: This will destroy all resources, including databases and volumes!
-```
+> [!WARNING]
+> This will destroy all resources, including databases and volumes!

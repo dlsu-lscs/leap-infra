@@ -15,4 +15,3 @@ configMapGenerator:
     behavior: merge
     literals:
       - NODE_ENV=production
-      - CORS_ORIGIN=https://leap25.com

@@ -4,12 +4,13 @@ kind: Deployment
 metadata:
   name: leap25-backend
 spec:
+  # initial replica count (3) --> will be be managed by HPA
   replicas: 3
   strategy:
     type: RollingUpdate
     rollingUpdate:
       maxUnavailable: 1
-      maxSurge: 1
+      maxSurge: 2
   template:
     spec:
       containers:

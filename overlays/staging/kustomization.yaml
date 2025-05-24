@@ -4,6 +4,8 @@ kind: Kustomization
 resources:
   - backend
   - frontend
+  - hpa/backend-hpa.yaml
+  - hpa/frontend-hpa.yaml
 namePrefix: staging-
 commonLabels:
   environment: staging
