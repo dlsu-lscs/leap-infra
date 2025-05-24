@@ -168,21 +168,7 @@ jobs:
         run: |
           echo "Verifying complete environment health..."
 
-          # verify backend health
-          echo "Checking backend health..."
-          BACKEND_HEALTH_STATUS=$(kubectl exec deploy/${{ steps.env.outputs.prefix }}leap25-backend -- curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health/live || echo "Failed")
-
-          if [[ "$BACKEND_HEALTH_STATUS" == "200" ]]; then
-            echo "✅ Backend health check: PASSED"
-          else
-            echo "❌ Backend health check: FAILED with status $BACKEND_HEALTH_STATUS"
-            echo "Backend logs:"
-            kubectl logs deploy/${{ steps.env.outputs.prefix }}leap25-backend --tail=20
-          fi
-
-          # verify frontend health
-          echo "Checking frontend health..."
-          # test pod for frontend checks
+          # test pod for health checks
           cat <<EOF | kubectl apply -f -
           apiVersion: v1
           kind: Pod
@@ -195,50 +181,96 @@ jobs:
             containers:
             - name: curl
               image: curlimages/curl:7.88.1
-              command: ["sleep", "300"]
+              command: ["sleep", "600"]
             restartPolicy: Never
           EOF
 
           kubectl wait --for=condition=ready pod/env-healthcheck --timeout=60s
 
-          # use the pod to test the frontend service
-          FRONTEND_HEALTH_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ || echo "Failed")
+          # internal backend health check
+          echo "Checking internal backend health..."
+          BACKEND_INTERNAL_STATUS=$(kubectl exec deploy/${{ steps.env.outputs.prefix }}leap25-backend -- curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health/live || echo "Failed")
 
-          if [[ "$FRONTEND_HEALTH_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "✅ Frontend health check: PASSED with status $FRONTEND_HEALTH_STATUS"
+          if [[ "$BACKEND_INTERNAL_STATUS" == "200" ]]; then
+            echo "✅ Internal backend health check: PASSED"
           else
-            echo "❌ Frontend health check: FAILED with status $FRONTEND_HEALTH_STATUS"
-            echo "Attempting detailed diagnosis:"
+            echo "❌ Internal backend health check: FAILED with status $BACKEND_INTERNAL_STATUS"
+            echo "Backend logs:"
+            kubectl logs deploy/${{ steps.env.outputs.prefix }}leap25-backend --tail=20
+          fi
+
+          # internal frontend health check
+          echo "Checking internal frontend health..."
+          FRONTEND_INTERNAL_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ || echo "Failed")
+
+          if [[ "$FRONTEND_INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ Internal frontend health check: PASSED with status $FRONTEND_INTERNAL_STATUS"
+          else
+            echo "❌ Internal frontend health check: FAILED with status $FRONTEND_INTERNAL_STATUS"
             kubectl exec env-healthcheck -- curl -v http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/
           fi
 
-          # verify external ingress if possible (depends on DNS propagation)
-          echo "Note: External ingress verification not attempted as it requires DNS propagation"
+          # external backend health check
+          BACKEND_DOMAIN="${{ github.event.inputs.environment == 'production' && 'api.dlsucso-leap.com' || 'api-staging.dlsucso-leap.com' }}"
+          echo "Checking external backend ingress at https://$BACKEND_DOMAIN/health/live..."
+
+          BACKEND_EXTERNAL_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" -k https://$BACKEND_DOMAIN/health/live --connect-timeout 10 || echo "Failed")
+
+          if [[ "$BACKEND_EXTERNAL_STATUS" == "200" ]]; then
+            echo "✅ External backend ingress check: PASSED"
+          else
+            echo "⚠️ External backend ingress check: NO RESPONSE or FAILED with status $BACKEND_EXTERNAL_STATUS"
+            echo "This might be expected if DNS hasn't propagated yet or certificates aren't ready"
+            kubectl get ingress | grep backend
+            kubectl describe ingress ${{ steps.env.outputs.prefix }}leap25-backend-ingress
+            kubectl get certificate | grep backend
+          fi
+
+          # external frontend health check
+          FRONTEND_DOMAIN="${{ github.event.inputs.environment == 'production' && 'dlsucso-leap.com' || 'staging.dlsucso-leap.com' }}"
+          echo "Checking external frontend ingress at https://$FRONTEND_DOMAIN..."
+
+          FRONTEND_EXTERNAL_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" -k https://$FRONTEND_DOMAIN/ --connect-timeout 10 || echo "Failed")
+
+          if [[ "$FRONTEND_EXTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ External frontend ingress check: PASSED with status $FRONTEND_EXTERNAL_STATUS"
+          else
+            echo "⚠️ External frontend ingress check: NO RESPONSE or FAILED with status $FRONTEND_EXTERNAL_STATUS"
+            echo "This might be expected if DNS hasn't propagated yet or certificates aren't ready"
+            kubectl get ingress | grep frontend
+            kubectl describe ingress ${{ steps.env.outputs.prefix }}leap25-frontend-ingress
+            kubectl get certificate | grep frontend
+          fi
 
           # report overall status
-          if [[ "$BACKEND_HEALTH_STATUS" == "200" ]] && [[ "$FRONTEND_HEALTH_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "✅ Overall environment health: GOOD"
-          else
-            echo "⚠️ Some health checks failed - environment may require attention"
-            if [[ "$BACKEND_HEALTH_STATUS" != "200" ]]; then
-              echo "- Backend health check failed"
-            fi
-            if [[ ! "$FRONTEND_HEALTH_STATUS" =~ ^(200|301|302)$ ]]; then
-              echo "- Frontend health check failed"
-            fi
+          echo ""
+          echo "HEALTH CHECK SUMMARY:"
+          echo "====================="
+          echo "Backend Internal Health: $BACKEND_INTERNAL_STATUS (Expected: 200)"
+          echo "Frontend Internal Health: $FRONTEND_INTERNAL_STATUS (Expected: 200|301|302)"
+          echo "Backend External Health: $BACKEND_EXTERNAL_STATUS (Expected: 200)"
+          echo "Frontend External Health: $FRONTEND_EXTERNAL_STATUS (Expected: 200|301|302)"
 
-            # display resource status for debugging
-            echo "Deployment status:"
-            kubectl get deployments | grep leap25
-            echo "Pod status:"
-            kubectl get pods | grep leap25
-            echo "HPA status:"
-            kubectl get hpa | grep leap25
-
-            # exit with error if required
-            # Uncomment to make the pipeline fail if health checks fail
-            # exit 1
-          fi
+          echo ""
+          echo "RESOURCE STATUS:"
+          echo "==============="
+          echo "Deployments:"
+          kubectl get deployments | grep leap25
+          echo ""
+          echo "Pods:"
+          kubectl get pods | grep leap25
+          echo ""
+          echo "HPAs:"
+          kubectl get hpa | grep leap25
+          echo ""
+          echo "Ingresses:"
+          kubectl get ingress | grep leap25
 
           # clean up test pod
           kubectl delete pod env-healthcheck
+
+          # only fail if internal checks failed
+          if [[ "$BACKEND_INTERNAL_STATUS" != "200" ]] || [[ ! "$FRONTEND_INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "❌ Environment deployment verification failed - internal service checks failed"
+            exit 1
+          fi

@@ -84,7 +84,8 @@ jobs:
       - name: Verify frontend deployment health
         run: |
           echo "Verifying frontend deployment health..."
-          # Create a test pod to verify frontend is serving correctly
+          # internal service check
+          echo "Checking internal frontend service..."
           cat <<EOF | kubectl apply -f -
           apiVersion: v1
           kind: Pod
@@ -101,20 +102,39 @@ jobs:
             restartPolicy: Never
           EOF
 
-          # Wait for the pod to be ready
           kubectl wait --for=condition=ready pod/frontend-healthcheck --timeout=60s
 
-          # Use the pod to test the frontend service
-          kubectl exec frontend-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ | grep -q "200\|301\|302"
+          # use the pod to test the frontend service internally
+          INTERNAL_STATUS=$(kubectl exec frontend-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ || echo "Failed")
 
-          if [ $? -eq 0 ]; then
-            echo "✅ Frontend is healthy and responding with success status"
+          if [[ "$INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ Internal frontend service check: PASSED with status $INTERNAL_STATUS"
           else
-            echo "❌ Frontend health check failed"
-            # Get more diagnostic information
+            echo "❌ Internal frontend service check: FAILED with status $INTERNAL_STATUS"
             kubectl exec frontend-healthcheck -- curl -v http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/
-            exit 1
           fi
 
-          # Clean up test pod
+          # external ingress check
+          DOMAIN="${{ steps.env.outputs.name == 'production' && 'dlsucso-leap.com' || 'staging.dlsucso-leap.com' }}"
+          echo "Checking external frontend ingress at https://$DOMAIN..."
+
+          EXTERNAL_STATUS=$(kubectl exec frontend-healthcheck -- curl -s -o /dev/null -w "%{http_code}" -k https://$DOMAIN/ --connect-timeout 10 || echo "Failed")
+
+          if [[ "$EXTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ External frontend ingress check: PASSED with status $EXTERNAL_STATUS"
+          else
+            echo "⚠️ External frontend ingress check: NO RESPONSE or FAILED with status $EXTERNAL_STATUS"
+            echo "This might be expected if DNS hasn't propagated yet or certificates aren't ready"
+            kubectl get ingress | grep frontend
+            kubectl describe ingress ${{ steps.env.outputs.prefix }}leap25-frontend-ingress
+            kubectl get certificate | grep frontend
+          fi
+
+          # clean up test pod
           kubectl delete pod frontend-healthcheck
+
+          # only fail the step if the internal check failed (external might need time for DNS/certs)
+          if [[ ! "$INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "❌ Frontend deployment verification failed"
+            exit 1
+          fi
