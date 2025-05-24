@@ -53,7 +53,8 @@ jobs:
           echo "Deploying frontend to ${{ steps.env.outputs.name }} environment"
 
           # apply updated frontend deployment with HPAs
-          kubectl apply -k overlays/${{ steps.env.outputs.name }}
+          kubectl apply -k overlays/${{ steps.env.outputs.name }}/frontend
+          kubectl apply -k overlays/${{ steps.env.outputs.name }}/hpa/frontend-hpa.yaml
 
           echo "Waiting for deployment rollout..."
           kubectl rollout status deployment/${{ steps.env.outputs.prefix }}leap25-frontend --timeout=300s
@@ -79,3 +80,41 @@ jobs:
           echo "Environment: ${{ steps.env.outputs.name }}"
           echo "Image: ${{ github.event.client_payload.image }}"
           # add notification integration (Slack, Teams, etc.)
+
+      - name: Verify frontend deployment health
+        run: |
+          echo "Verifying frontend deployment health..."
+          # Create a test pod to verify frontend is serving correctly
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: frontend-healthcheck
+            namespace: default
+            labels:
+              app: frontend-healthcheck
+          spec:
+            containers:
+            - name: curl
+              image: curlimages/curl:7.88.1
+              command: ["sleep", "300"]
+            restartPolicy: Never
+          EOF
+
+          # Wait for the pod to be ready
+          kubectl wait --for=condition=ready pod/frontend-healthcheck --timeout=60s
+
+          # Use the pod to test the frontend service
+          kubectl exec frontend-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ | grep -q "200\|301\|302"
+
+          if [ $? -eq 0 ]; then
+            echo "✅ Frontend is healthy and responding with success status"
+          else
+            echo "❌ Frontend health check failed"
+            # Get more diagnostic information
+            kubectl exec frontend-healthcheck -- curl -v http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/
+            exit 1
+          fi
+
+          # Clean up test pod
+          kubectl delete pod frontend-healthcheck

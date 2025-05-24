@@ -88,7 +88,7 @@ jobs:
           images:
           - name: ghcr.io/dlsu-lscs/leap25-backend
             newName: ghcr.io/dlsu-lscs/leap25-backend
-            newTag: ${{{ github.event.client_payload.image }}#sha-*}
+            newTag: ${{ github.event.client_payload.image }}
           EOF
 
           echo "Applying migration job..."
@@ -115,7 +115,8 @@ jobs:
           echo "Deploying backend to ${{ steps.env.outputs.name }} environment"
 
           # apply updated backend deployment with HPAs
-          kubectl apply -k overlays/${{ steps.env.outputs.name }}
+          kubectl apply -k overlays/${{ steps.env.outputs.name }}/backend
+          kubectl apply -k overlays/${{ steps.env.outputs.name }}/hpa/backend-hpa.yaml
 
           echo "Waiting for deployment rollout..."
           kubectl rollout status deployment/${{ steps.env.outputs.prefix }}leap25-backend --timeout=300s
@@ -151,3 +152,22 @@ jobs:
           echo "Image: ${{ github.event.client_payload.image }}"
           echo "Has Migrations: ${{ github.event.client_payload.has_migrations }}"
           # add notification integration (Slack, Teams, etc.)
+
+      - name: Verify backend deployment health
+        run: |
+          echo "Verifying backend deployment health..."
+          # Use kubectl to check the health endpoint directly
+          HEALTH_STATUS=$(kubectl exec deploy/${{ steps.env.outputs.prefix }}leap25-backend -- curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health/live || echo "Failed")
+
+          if [[ "$HEALTH_STATUS" == "200" ]]; then
+            echo "✅ Backend health endpoint returned status 200 - service is healthy"
+          else
+            echo "❌ Backend health check failed with status: $HEALTH_STATUS"
+            echo "Fetching logs for debugging:"
+            kubectl logs deploy/${{ steps.env.outputs.prefix }}leap25-backend --tail=50
+            exit 1
+          fi
+
+          # Check if the API can handle basic requests
+          API_STATUS=$(kubectl exec deploy/${{ steps.env.outputs.prefix }}leap25-backend -- curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ || echo "Failed")
+          echo "API root endpoint status: $API_STATUS"

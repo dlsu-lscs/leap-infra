@@ -162,3 +162,83 @@ jobs:
           echo "Frontend image: ${{ github.event.inputs.frontend_image || 'unchanged' }}"
           echo "Migrations run: ${{ github.event.inputs.run_migrations }}"
           # add notification integration (Slack, Teams, etc.)
+
+      - name: Verify full environment health
+        timeout-minutes: 5
+        run: |
+          echo "Verifying complete environment health..."
+
+          # verify backend health
+          echo "Checking backend health..."
+          BACKEND_HEALTH_STATUS=$(kubectl exec deploy/${{ steps.env.outputs.prefix }}leap25-backend -- curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health/live || echo "Failed")
+
+          if [[ "$BACKEND_HEALTH_STATUS" == "200" ]]; then
+            echo "✅ Backend health check: PASSED"
+          else
+            echo "❌ Backend health check: FAILED with status $BACKEND_HEALTH_STATUS"
+            echo "Backend logs:"
+            kubectl logs deploy/${{ steps.env.outputs.prefix }}leap25-backend --tail=20
+          fi
+
+          # verify frontend health
+          echo "Checking frontend health..."
+          # test pod for frontend checks
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: env-healthcheck
+            namespace: default
+            labels:
+              app: env-healthcheck
+          spec:
+            containers:
+            - name: curl
+              image: curlimages/curl:7.88.1
+              command: ["sleep", "300"]
+            restartPolicy: Never
+          EOF
+
+          kubectl wait --for=condition=ready pod/env-healthcheck --timeout=60s
+
+          # use the pod to test the frontend service
+          FRONTEND_HEALTH_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ || echo "Failed")
+
+          if [[ "$FRONTEND_HEALTH_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ Frontend health check: PASSED with status $FRONTEND_HEALTH_STATUS"
+          else
+            echo "❌ Frontend health check: FAILED with status $FRONTEND_HEALTH_STATUS"
+            echo "Attempting detailed diagnosis:"
+            kubectl exec env-healthcheck -- curl -v http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/
+          fi
+
+          # verify external ingress if possible (depends on DNS propagation)
+          echo "Note: External ingress verification not attempted as it requires DNS propagation"
+
+          # report overall status
+          if [[ "$BACKEND_HEALTH_STATUS" == "200" ]] && [[ "$FRONTEND_HEALTH_STATUS" =~ ^(200|301|302)$ ]]; then
+            echo "✅ Overall environment health: GOOD"
+          else
+            echo "⚠️ Some health checks failed - environment may require attention"
+            if [[ "$BACKEND_HEALTH_STATUS" != "200" ]]; then
+              echo "- Backend health check failed"
+            fi
+            if [[ ! "$FRONTEND_HEALTH_STATUS" =~ ^(200|301|302)$ ]]; then
+              echo "- Frontend health check failed"
+            fi
+
+            # display resource status for debugging
+            echo "Deployment status:"
+            kubectl get deployments | grep leap25
+            echo "Pod status:"
+            kubectl get pods | grep leap25
+            echo "HPA status:"
+            kubectl get hpa | grep leap25
+
+            # exit with error if required
+            # Uncomment to make the pipeline fail if health checks fail
+            # exit 1
+          fi
+
+          # clean up test pod
+          kubectl delete pod env-healthcheck
