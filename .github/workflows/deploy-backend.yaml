@@ -78,12 +78,14 @@ jobs:
           set -e
           echo "Applying migrations for ${{ steps.env.outputs.name }} environment"
 
-          # Create a temporary kustomization file for migrations
+          mkdir -p temp-migrations
+
+          # temporary kustomization file for migrations
           cat <<EOF > temp-migrations/kustomization.yaml
           apiVersion: kustomize.config.k8s.io/v1beta1
           kind: Kustomization
           resources:
-          - ../base/migrations
+          - $(pwd)/base/migrations  # Use absolute path to the base migrations directory
           namePrefix: ${{ steps.env.outputs.prefix }}
           images:
           - name: ghcr.io/dlsu-lscs/leap25-backend

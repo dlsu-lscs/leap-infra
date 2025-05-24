@@ -84,25 +84,30 @@ jobs:
           set -e
           echo "Applying migrations for ${{ steps.env.outputs.name }} environment"
 
-          # update migration job image if backend image is specified
-          if [ -n "${{ github.event.inputs.backend_image }}" ]; then
-            cd base/migrations
-            kustomize edit set image ghcr.io/dlsu-lscs/leap25-backend=ghcr.io/dlsu-lscs/leap25-backend:${{ github.event.inputs.backend_image }}
-            cd ../../
-          fi
+          # Create a temporary directory for the migration job
+          mkdir -p temp-migrations
 
-          # apply migration job with name prefix for the environment
-          TEMP_KUST_DIR=$(mktemp -d)
-          cat <<EOF > $TEMP_KUST_DIR/kustomization.yaml
+          # Copy the base migration job definition to the temp directory
+          cp -r base/migrations/* temp-migrations/
+
+          # Create a kustomization file that correctly references local resources
+          cat <<EOF > temp-migrations/kustomization.yaml
           apiVersion: kustomize.config.k8s.io/v1beta1
           kind: Kustomization
           resources:
-          - ../base/migrations
+          - job.yaml
           namePrefix: ${{ steps.env.outputs.prefix }}
           EOF
 
-          kubectl apply -k $TEMP_KUST_DIR
-          rm -rf $TEMP_KUST_DIR
+          # Update the image if specified
+          if [ -n "${{ github.event.inputs.backend_image }}" ]; then
+            cd temp-migrations
+            kustomize edit set image ghcr.io/dlsu-lscs/leap25-backend=ghcr.io/dlsu-lscs/leap25-backend:${{ github.event.inputs.backend_image }}
+            cd ..
+          fi
+
+          # Apply the migration job
+          kubectl apply -k temp-migrations
 
           JOB_NAME="${{ steps.env.outputs.prefix }}leap25-db-migration"
           echo "Migration job name: $JOB_NAME"
@@ -118,6 +123,9 @@ jobs:
 
           echo "Migrations completed successfully"
           kubectl logs job/$JOB_NAME
+
+          # Clean up temp directory
+          rm -rf temp-migrations
 
       - name: Deploy full environment
         timeout-minutes: 10
