@@ -7,7 +7,7 @@ set -e
 
 ENVIRONMENT=${1:-staging}
 COMPONENT=${2:-all} # all, backend, frontend, migrations
-IMAGE_TAG=${3}
+IMAGE_TAG=${3-latest}
 
 if [ -z "$ENVIRONMENT" ]; then
     echo "Error: Environment is required"

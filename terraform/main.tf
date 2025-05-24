@@ -135,21 +135,7 @@ resource "helm_release" "cert_manager" {
   }
 }
 
-# Install MySQL Operator for Kubernetes (free)
-resource "helm_release" "mysql_operator" {
-  name             = "mysql-operator"
-  repository       = "https://mysql.github.io/mysql-operator"
-  chart            = "mysql-operator"
-  namespace        = "mysql-operator"
-  create_namespace = true
-
-  set {
-    name  = "replicas"
-    value = "1"
-  }
-}
-
-# Install sealed-secrets with Helm
+# install sealed-secrets with Helm
 resource "helm_release" "sealed_secrets" {
   name       = "sealed-secrets"
   repository = "https://bitnami-labs.github.io/sealed-secrets"

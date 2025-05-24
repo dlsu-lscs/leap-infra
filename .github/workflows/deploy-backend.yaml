@@ -88,7 +88,7 @@ jobs:
           images:
           - name: ghcr.io/dlsu-lscs/leap25-backend
             newName: ghcr.io/dlsu-lscs/leap25-backend
-            newTag: sha-${{ github.event.client_payload.commit_sha }}
+            newTag: ${{{ github.event.client_payload.image }}#sha-*}
           EOF
 
           echo "Applying migration job..."
@@ -98,7 +98,7 @@ jobs:
           echo "Migration job name: $JOB_NAME"
 
           echo "Waiting for migration job completion..."
-          kubectl wait --for=condition=complete job/$JOB_NAME --timeout=180s
+          kubectl wait --for=condition=complete job/$JOB_NAME --timeout=300s
 
           if [ $? -ne 0 ]; then
             echo "Migration job failed or timed out"
@@ -110,15 +110,19 @@ jobs:
           kubectl logs job/$JOB_NAME
 
       - name: Deploy backend application
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           echo "Deploying backend to ${{ steps.env.outputs.name }} environment"
 
-          # apply updated backend deployment
-          kubectl apply -k overlays/${{ steps.env.outputs.name }}/backend
+          # apply updated backend deployment with HPAs
+          kubectl apply -k overlays/${{ steps.env.outputs.name }}
 
           echo "Waiting for deployment rollout..."
           kubectl rollout status deployment/${{ steps.env.outputs.prefix }}leap25-backend --timeout=300s
+
+          # verify HPA is running properly
+          echo "Checking HPA status..."
+          kubectl get hpa ${{ steps.env.outputs.prefix }}leap25-backend-hpa
 
           echo "Backend deployment completed successfully"
 
@@ -134,10 +138,16 @@ jobs:
         if: success()
         run: |
           echo "Backend deployment to ${{ steps.env.outputs.name }} completed successfully"
+          echo "Environment: ${{ steps.env.outputs.name }}"
+          echo "Image: ${{ github.event.client_payload.image }}"
+          echo "Has Migrations: ${{ github.event.client_payload.has_migrations }}"
           # add notification integration (Slack, Teams, etc.)
 
       - name: Notify deployment failure
         if: failure()
         run: |
           echo "Backend deployment to ${{ steps.env.outputs.name }} failed"
+          echo "Environment: ${{ steps.env.outputs.name }}"
+          echo "Image: ${{ github.event.client_payload.image }}"
+          echo "Has Migrations: ${{ github.event.client_payload.has_migrations }}"
           # add notification integration (Slack, Teams, etc.)

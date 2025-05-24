@@ -4,6 +4,7 @@
 *.tfplan
 .terraform/
 .terraform.lock.hcl
+**/tfplan
 
 # Ignore local env files
 terraform.tfvars
@@ -25,3 +26,4 @@ overlays/*/*/secrets/.env.*
 **/.env.*
 !**/.env.*.example
 !**/.env.example
+*.log

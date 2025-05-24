@@ -44,19 +44,23 @@ jobs:
         run: |
           echo "Updating frontend image reference for ${{ steps.env.outputs.name }} to ${{ github.event.client_payload.image }}"
           cd overlays/${{ steps.env.outputs.name }}/frontend
-          kustomize edit set image ghcr.io/dlsu-lscs/leap-2025=${{ github.event.client_payload.image }}
+          kustomize edit set image ghcr.io/dlsu-lscs/leap25-frontend=${{ github.event.client_payload.image }}
           cd ../../../
 
       - name: Deploy frontend application
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           echo "Deploying frontend to ${{ steps.env.outputs.name }} environment"
 
-          # apply updated frontend deployment
-          kubectl apply -k overlays/${{ steps.env.outputs.name }}/frontend
+          # apply updated frontend deployment with HPAs
+          kubectl apply -k overlays/${{ steps.env.outputs.name }}
 
           echo "Waiting for deployment rollout..."
           kubectl rollout status deployment/${{ steps.env.outputs.prefix }}leap25-frontend --timeout=300s
+
+          # verify HPA is running properly
+          echo "Checking HPA status..."
+          kubectl get hpa ${{ steps.env.outputs.prefix }}leap25-frontend-hpa
 
           echo "Frontend deployment completed successfully"
 
@@ -64,10 +68,14 @@ jobs:
         if: success()
         run: |
           echo "Frontend deployment to ${{ steps.env.outputs.name }} completed successfully"
+          echo "Environment: ${{ steps.env.outputs.name }}"
+          echo "Image: ${{ github.event.client_payload.image }}"
           # add notification integration (Slack, Teams, etc.)
 
       - name: Notify deployment failure
         if: failure()
         run: |
           echo "Frontend deployment to ${{ steps.env.outputs.name }} failed"
+          echo "Environment: ${{ steps.env.outputs.name }}"
+          echo "Image: ${{ github.event.client_payload.image }}"
           # add notification integration (Slack, Teams, etc.)
