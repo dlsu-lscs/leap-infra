@@ -77,20 +77,94 @@ jobs:
           kustomize edit set image ghcr.io/dlsu-lscs/leap25-frontend=ghcr.io/dlsu-lscs/leap25-frontend:${{ github.event.inputs.frontend_image }}
           cd ../../../
 
+      - name: Test database connection
+        if: github.event.inputs.run_migrations == 'true'
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: db-test
+            labels:
+              app: db-test
+          spec:
+            containers:
+            - name: mysql-client
+              image: mysql:8
+              command: ["sleep", "30"]
+              env:
+              - name: DB_HOST
+                valueFrom:
+                  secretKeyRef:
+                    name: ${{ steps.env.outputs.prefix }}leap25-backend-secrets
+                    key: DB_HOST
+              - name: DB_PORT
+                valueFrom:
+                  secretKeyRef:
+                    name: ${{ steps.env.outputs.prefix }}leap25-backend-secrets
+                    key: DB_PORT
+              - name: DB_USER
+                valueFrom:
+                  secretKeyRef:
+                    name: ${{ steps.env.outputs.prefix }}leap25-backend-secrets
+                    key: DB_USER
+              - name: DB_PASS
+                valueFrom:
+                  secretKeyRef:
+                    name: ${{ steps.env.outputs.prefix }}leap25-backend-secrets
+                    key: DB_PASS
+              - name: DB_DATABASE
+                valueFrom:
+                  secretKeyRef:
+                    name: ${{ steps.env.outputs.prefix }}leap25-backend-secrets
+                    key: DB_DATABASE
+            restartPolicy: Never
+          EOF
+
+          kubectl wait --for=condition=ready pod/db-test --timeout=60s
+
+          echo "Testing database connection..."
+          kubectl exec db-test -- mysql -h$DB_HOST -P$DB_PORT -u$DB_USER -p$DB_PASS $DB_DATABASE -e "SELECT 'Connection successful';"
+
+          kubectl delete pod db-test
+
+      - name: Examine migration script in container image
+        if: github.event.inputs.run_migrations == 'true'
+        run: |
+          # Create a temporary pod with the backend image
+          cat <<EOF | kubectl apply -f -
+          apiVersion: v1
+          kind: Pod
+          metadata:
+            name: script-check
+          spec:
+            containers:
+            - name: backend
+              image: ghcr.io/dlsu-lscs/leap25-backend:${{ github.event.inputs.backend_image || 'latest' }}
+              command: ["sleep", "60"]
+            restartPolicy: Never
+          EOF
+
+          kubectl wait --for=condition=ready pod/script-check --timeout=60s
+
+          echo "Checking migration script location..."
+          kubectl exec script-check -- ls -la /app/dist/migrations/
+
+          echo "Examining migration script content..."
+          kubectl exec script-check -- cat /app/dist/migrations/run-migrations.js
+
+          kubectl delete pod script-check
+
       - name: Run migrations
         if: github.event.inputs.run_migrations == 'true'
-        timeout-minutes: 5
+        timeout-minutes: 10
         run: |
           set -e
           echo "Applying migrations for ${{ steps.env.outputs.name }} environment"
 
-          # Create a temporary directory for the migration job
           mkdir -p temp-migrations
-
-          # Copy the base migration job definition to the temp directory
           cp -r base/migrations/* temp-migrations/
 
-          # Create a kustomization file that correctly references local resources
           cat <<EOF > temp-migrations/kustomization.yaml
           apiVersion: kustomize.config.k8s.io/v1beta1
           kind: Kustomization
@@ -99,28 +173,40 @@ jobs:
           namePrefix: ${{ steps.env.outputs.prefix }}
           EOF
 
-          # Update the image if specified
+          # update the image if specified
           if [ -n "${{ github.event.inputs.backend_image }}" ]; then
             cd temp-migrations
             kustomize edit set image ghcr.io/dlsu-lscs/leap25-backend=ghcr.io/dlsu-lscs/leap25-backend:${{ github.event.inputs.backend_image }}
             cd ..
           fi
 
-          # Apply the migration job
+          # apply the migration job
           kubectl apply -k temp-migrations
 
           JOB_NAME="${{ steps.env.outputs.prefix }}leap25-db-migration"
           echo "Migration job name: $JOB_NAME"
 
-          echo "Waiting for migration job completion..."
-          kubectl wait --for=condition=complete job/$JOB_NAME --timeout=300s
+          POD_NAME=$(kubectl get pods -l job-name=$JOB_NAME -o jsonpath='{.items[0].metadata.name}' --field-selector=status.phase!=Succeeded)
 
-          if [ $? -ne 0 ]; then
+          echo "Watching migration pod: $POD_NAME"
+          kubectl describe pod $POD_NAME
+
+          # stream logs in background while waiting for job
+          kubectl logs -f $POD_NAME &
+          LOG_PID=$!
+
+          echo "Waiting for migration job completion..."
+          if ! kubectl wait --for=condition=complete job/$JOB_NAME --timeout=300s; then
             echo "Migration job failed or timed out"
-            kubectl logs job/$JOB_NAME
+            echo "Fetching detailed pod information:"
+            kubectl describe pod $POD_NAME
+            echo "Last 50 lines of logs:"
+            kubectl logs $POD_NAME --tail=50
+            kill $LOG_PID 2>/dev/null || true
             exit 1
           fi
 
+          kill $LOG_PID 2>/dev/null || true
           echo "Migrations completed successfully"
           kubectl logs job/$JOB_NAME
 

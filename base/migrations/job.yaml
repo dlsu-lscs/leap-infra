@@ -11,10 +11,17 @@ spec:
     spec:
       containers:
         - name: migrations
-          image: ghcr.io/dlsu-lscs/leap25-backend:latest
+          image: ghcr.io/dlsu-lscs/leap25-backend:${{ github.event.inputs.backend_image || 'latest' }}
           command: ["node", "dist/migrations/run-migrations.js"]
           envFrom:
             - secretRef:
                 name: leap25-backend-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "1"
+              memory: "1Gi"
       restartPolicy: Never
   backoffLimit: 3
