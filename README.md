@@ -66,10 +66,10 @@ kubectl get service -n ingress-nginx ingress-nginx-controller -o jsonpath='{.sta
 ```
 
 Create A records for:
-- leap25.com
-- api.leap25.com
-- staging.leap25.com
-- api-staging.leap25.com
+- dlsucso-leap.com
+- api.dlsucso-leap.com
+- staging.dlsucso-leap.com
+- api-staging.dlsucso-leap.com
 
 ### Step 5: Get Sealed Secrets Certificate
 
@@ -86,18 +86,18 @@ Secrets are managed using SealedSecrets:
 
 1. Create or edit a plain text secret file:
    ```bash
-   vi overlays/staging/backend/secrets/.env.staging
+   vi overlays/production/backend/secrets/.env.production
    ```
 
 2. Seal the secret:
    ```bash
-   ./scripts/seal-secrets.sh staging backend
+   ./scripts/seal-secrets.sh production backend
    ```
 
 3. Commit only the sealed secret:
    ```bash
-   git add overlays/staging/backend/secrets/.sealedenv.staging.yaml
-   git commit -m "Update staging backend sealed secrets"
+   git add overlays/production/backend/secrets/.sealedenv.production.yaml
+   git commit -m "chore: update production backend sealed secrets"
    ```
 
 ### Example Secret Files

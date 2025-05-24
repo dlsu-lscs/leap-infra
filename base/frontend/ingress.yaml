@@ -10,10 +10,10 @@ metadata:
 spec:
   tls:
     - hosts:
-        - leap25.com
+        - dlsucso-leap.com
       secretName: leap25-frontend-tls
   rules:
-    - host: leap25.com
+    - host: dlsucso-leap.com
       http:
         paths:
           - path: /
