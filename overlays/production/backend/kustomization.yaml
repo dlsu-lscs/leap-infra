@@ -4,7 +4,7 @@ kind: Kustomization
 resources:
   - ../../../base/backend
   - ./secrets/.sealedenv.production.yaml
-patches:
+patchesStrategicMerge:
   - deployment-patch.yaml
 secretGenerator:
   - envs:

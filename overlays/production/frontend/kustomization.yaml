@@ -4,7 +4,7 @@ kind: Kustomization
 resources:
   - ../../../base/frontend
   - ./secrets/.sealedenv.production.yaml
-patches:
+patchesStrategicMerge:
   - deployment-patch.yaml
 secretGenerator:
   - name: leap25-frontend-secrets
