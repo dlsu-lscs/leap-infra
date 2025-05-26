@@ -1,0 +1,176 @@
+---
+name: leap25-prod
+region: sgp1
+services:
+  # frontend
+  - name: leap25-frontend
+    environment_slug: node-js
+    github:
+      repo: dlsu-lscs/leap25-frontend
+      branch: main
+      deploy_on_push: true
+    # image:
+    #   registry_type: GHCR
+    #   registry: dlsu-lscs
+    #   repository: leap25-web
+    #   tag: latest
+    build_command: npm install && npm run build
+    run_command: npx next start
+    http_port: 3000
+    instance_size_slug: basic-xs
+    autoscaling:
+      min_instance_count: 1
+      max_instance_count: 2
+      metrics:
+        cpu:
+          percent: 70
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: ${app.leap25-backend.PUBLIC_URL}
+      - key: NEXTAUTH_URL
+        value: ${_self.PUBLIC_URL}
+      - key: NEXTAUTH_SECRET
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: NEXT_PUBLIC_GOOGLE_CLIENT_SECRET
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+    routes:
+      - path: /
+    alerts:
+      - rule: DEPLOYMENT_FAILED
+      - rule: DOMAIN_FAILED
+      - rule: CPU_UTILIZATION
+        value: 90
+      - rule: MEM_UTILIZATION
+        value: 90
+
+  # backend API
+  - name: leap25-backend
+    environment_slug: node-js
+    github:
+      repo: dlsu-lscs/leap25-backend
+      branch: main
+      deploy_on_push: true
+    # image:
+    #   registry_type: GHCR
+    #   registry: dlsu-lscs
+    #   repository: leap25-backend
+    #   tag: latest
+    build_command: npm install && npm run build
+    run_command: node dist/main.js
+    http_port: 3000
+    instance_size_slug: professional-xs
+    autoscaling:
+      min_instance_count: 1
+      max_instance_count: 3
+      metrics:
+        cpu:
+          percent: 70
+    envs:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: DB_HOST
+        value: ${db.leap25-db-production.HOSTNAME}
+      - key: DB_PORT
+        value: ${db.leap25-db-production.PORT}
+      - key: DB_DATABASE
+        value: ${db.leap25-db-production.DATABASE}
+      - key: DB_USER
+        value: ${db.leap25-db-production.USERNAME}
+      - key: DB_PASS
+        value: ${db.leap25-db-production.PASSWORD}
+      - key: REDIS_CONNECTION_URL
+        value: redis://default:${db.leap25-cache-production.PASSWORD}@${db.leap25-cache-production.HOSTNAME}:${db.leap25-cache-production.PORT}
+      - key: SESSION_SECRET
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: JWT_SECRET
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: CORS_ORIGIN
+        value: ${app.leap25-frontend.PUBLIC_URL}
+      - key: GOOGLE_CLIENT_ID
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: GOOGLE_CLIENT_SECRET
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: CONTENTFUL_SPACE_ID
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: CONTENTFUL_ACCESS_TOKEN
+        type: SECRET
+        scope: RUN_AND_BUILD_TIME
+      - key: CONTENTFUL_ENVIRONMENT
+        value: master
+    health_check:
+      http_path: /health/live
+      initial_delay_seconds: 10
+      period_seconds: 5
+    routes:
+      - path: /
+        preserve_path_prefix: true
+    alerts:
+      - rule: DEPLOYMENT_FAILED
+      - rule: DOMAIN_FAILED
+      - rule: CPU_UTILIZATION
+        value: 90
+      - rule: MEM_UTILIZATION
+        value: 90
+
+databases:
+  # MySQL
+  - name: leap25-db-production
+    engine: MYSQL
+    version: "8"
+    production: true
+    cluster_name: leap25-db-production
+    db_name: leap25db_production
+    db_user: leap25user
+    size: db-s-2vcpu-4gb
+
+  # Redis/Valkey for caching
+  - name: leap25-cache-production
+    engine: VALKEY
+    version: "8"
+    production: true
+    cluster_name: leap25-cache-production
+    size: db-s-1vcpu-2gb
+
+jobs:
+  - name: leap25-db-migrations
+    github:
+      repo: dlsu-lscs/leap25-backend
+      branch: main
+      deploy_on_push: false
+    build_command: npm install && npm run build
+    run_command: node dist/migrations/run-migrations.js
+    envs:
+      - key: DB_HOST
+        value: ${db.leap25-db-production.HOSTNAME}
+      - key: DB_PORT
+        value: ${db.leap25-db-production.PORT}
+      - key: DB_DATABASE
+        value: ${db.leap25-db-production.DATABASE}
+      - key: DB_USER
+        value: ${db.leap25-db-production.USERNAME}
+      - key: DB_PASS
+        value: ${db.leap25-db-production.PASSWORD}
+    kind: PRE_DEPLOY
+
+domains:
+  - domain: dlsucso-leap.com
+    type: PRIMARY
+    zone: dlsucso-leap.com
+
+  - domain: api.dlsucso-leap.com
+    type: PRIMARY
+    zone: dlsucso-leap.com
