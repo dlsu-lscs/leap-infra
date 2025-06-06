@@ -68,15 +68,15 @@ jobs:
       - name: Notify deployment success
         if: success()
         run: |
-          echo "Frontend deployment to ${{ steps.env.outputs.name }} completed successfully"
+          echo "[PASSED] Frontend deployment to ${{ steps.env.outputs.name }} completed successfully"
           echo "Environment: ${{ steps.env.outputs.name }}"
           echo "Image: ${{ github.event.client_payload.image }}"
-          # add notification integration (Slack, Teams, etc.)
+          # TODO: add notification integration (Slack, Teams, etc.)
 
       - name: Notify deployment failure
         if: failure()
         run: |
-          echo "Frontend deployment to ${{ steps.env.outputs.name }} failed"
+          echo "[FAILED] Frontend deployment to ${{ steps.env.outputs.name }} failed"
           echo "Environment: ${{ steps.env.outputs.name }}"
           echo "Image: ${{ github.event.client_payload.image }}"
           # add notification integration (Slack, Teams, etc.)
@@ -108,9 +108,9 @@ jobs:
           INTERNAL_STATUS=$(kubectl exec frontend-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ || echo "Failed")
 
           if [[ "$INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "✅ Internal frontend service check: PASSED with status $INTERNAL_STATUS"
+            echo "[passed] internal frontend service check: passed with status $internal_status"
           else
-            echo "❌ Internal frontend service check: FAILED with status $INTERNAL_STATUS"
+            echo "[FAILED] Internal frontend service check: FAILED with status $INTERNAL_STATUS"
             kubectl exec frontend-healthcheck -- curl -v http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/
           fi
 
@@ -121,9 +121,9 @@ jobs:
           EXTERNAL_STATUS=$(kubectl exec frontend-healthcheck -- curl -s -o /dev/null -w "%{http_code}" -k https://$DOMAIN/ --connect-timeout 10 || echo "Failed")
 
           if [[ "$EXTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "✅ External frontend ingress check: PASSED with status $EXTERNAL_STATUS"
+            echo "[PASSED] External frontend ingress check: PASSED with status $EXTERNAL_STATUS"
           else
-            echo "⚠️ External frontend ingress check: NO RESPONSE or FAILED with status $EXTERNAL_STATUS"
+            echo "[FAILED] External frontend ingress check: NO RESPONSE or FAILED with status $EXTERNAL_STATUS"
             echo "This might be expected if DNS hasn't propagated yet or certificates aren't ready"
             kubectl get ingress | grep frontend
             kubectl describe ingress ${{ steps.env.outputs.prefix }}leap25-frontend-ingress
@@ -135,6 +135,6 @@ jobs:
 
           # only fail the step if the internal check failed (external might need time for DNS/certs)
           if [[ ! "$INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "❌ Frontend deployment verification failed"
+            echo "Frontend deployment verification failed"
             exit 1
           fi

@@ -89,6 +89,102 @@ resource "digitalocean_database_cluster" "redis" {
   private_network_uuid = digitalocean_vpc.leap25_vpc.id
 }
 
+resource "digitalocean_app" "leap25_migrations" {
+  spec {
+    name   = "leap25-migrations-${var.environment}"
+    region = var.region
+
+    # job for auto migrations after every new deployment
+    job {
+      name               = "leap25-db-migration-${var.environment}"
+      kind               = "POST_DEPLOY" # runs every after new deployment of services
+      instance_count     = 1
+      instance_size_slug = "basic-xxs"
+
+      github {
+        repo           = "dlsu-lscs/leap25-backend"
+        branch         = var.environment == "production" ? "main" : "staging"
+        deploy_on_push = false
+      }
+
+      run_command = "npm run migrate"
+
+      env {
+        key   = "DB_HOST"
+        value = digitalocean_database_cluster.mysql.private_host
+      }
+      env {
+        key   = "DB_PORT"
+        value = digitalocean_database_cluster.mysql.port
+      }
+      env {
+        key   = "DB_USER"
+        value = digitalocean_database_user.leap25_user.name
+      }
+      env {
+        key   = "DB_PASSWORD"
+        value = digitalocean_database_user.leap25_user.password
+        type  = "SECRET"
+      }
+      env {
+        key   = "DB_NAME"
+        value = digitalocean_database_db.leap25_db.name
+      }
+      env {
+        key   = "NODE_ENV"
+        value = var.environment
+      }
+    }
+
+    # for manual migrations run
+    job {
+      name               = "run-migrations"
+      kind               = "UNSPECIFIED" # run manually from DigitalOcean dashboard
+      instance_count     = 1
+      instance_size_slug = "basic-xxs"
+
+      github {
+        repo           = "dlsu-lscs/leap25-backend"
+        branch         = "main"
+        deploy_on_push = false
+      }
+
+      run_command = "npm run migrate"
+
+      env {
+        key   = "DB_HOST"
+        value = digitalocean_database_cluster.mysql.host
+      }
+      env {
+        key   = "DB_PORT"
+        value = digitalocean_database_cluster.mysql.port
+      }
+      env {
+        key   = "DB_USER"
+        value = digitalocean_database_user.leap25_user.name
+      }
+      env {
+        key   = "DB_PASSWORD"
+        value = digitalocean_database_user.leap25_user.password
+        type  = "SECRET"
+      }
+      env {
+        key   = "DB_NAME"
+        value = digitalocean_database_db.leap25_db.name
+      }
+      env {
+        key   = "NODE_ENV"
+        value = var.environment
+      }
+    }
+  }
+
+  depends_on = [
+    digitalocean_database_cluster.mysql,
+    digitalocean_database_db.leap25_db,
+    digitalocean_database_user.leap25_user
+  ]
+}
 
 
 # # firewall rules to allow app platform to connect

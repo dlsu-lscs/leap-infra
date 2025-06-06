@@ -197,7 +197,7 @@ jobs:
 
           echo "Waiting for migration job completion..."
           if ! kubectl wait --for=condition=complete job/$JOB_NAME --timeout=300s; then
-            echo "Migration job failed or timed out"
+            echo "[FAILED] Migration job failed or timed out"
             echo "Fetching detailed pod information:"
             kubectl describe pod $POD_NAME
             echo "Last 50 lines of logs:"
@@ -207,7 +207,7 @@ jobs:
           fi
 
           kill $LOG_PID 2>/dev/null || true
-          echo "Migrations completed successfully"
+          echo "[PASSED] Migrations completed successfully"
           kubectl logs job/$JOB_NAME
 
           # Clean up temp directory
@@ -242,20 +242,20 @@ jobs:
       - name: Notify deployment success
         if: success()
         run: |
-          echo "Environment deployment to ${{ steps.env.outputs.name }} completed successfully"
+          echo "[PASSED] Environment deployment to ${{ steps.env.outputs.name }} completed successfully"
           echo "Backend image: ${{ github.event.inputs.backend_image || 'unchanged' }}"
           echo "Frontend image: ${{ github.event.inputs.frontend_image || 'unchanged' }}"
           echo "Migrations run: ${{ github.event.inputs.run_migrations }}"
-          # add notification integration (Slack, Teams, etc.)
+          # TODO: add notification integration (Slack, Teams, etc.)
 
       - name: Notify deployment failure
         if: failure()
         run: |
-          echo "Environment deployment to ${{ steps.env.outputs.name }} failed"
+          echo "[FAILED] Environment deployment to ${{ steps.env.outputs.name }} failed"
           echo "Backend image: ${{ github.event.inputs.backend_image || 'unchanged' }}"
           echo "Frontend image: ${{ github.event.inputs.frontend_image || 'unchanged' }}"
           echo "Migrations run: ${{ github.event.inputs.run_migrations }}"
-          # add notification integration (Slack, Teams, etc.)
+          # TODO: add notification integration (Slack, Teams, etc.)
 
       - name: Verify full environment health
         timeout-minutes: 5
@@ -286,9 +286,9 @@ jobs:
           BACKEND_INTERNAL_STATUS=$(kubectl exec deploy/${{ steps.env.outputs.prefix }}leap25-backend -- curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/health/live || echo "Failed")
 
           if [[ "$BACKEND_INTERNAL_STATUS" == "200" ]]; then
-            echo "✅ Internal backend health check: PASSED"
+            echo "[PASSED] Internal backend health check: PASSED"
           else
-            echo "❌ Internal backend health check: FAILED with status $BACKEND_INTERNAL_STATUS"
+            echo "[FAILED] Internal backend health check: FAILED with status $BACKEND_INTERNAL_STATUS"
             echo "Backend logs:"
             kubectl logs deploy/${{ steps.env.outputs.prefix }}leap25-backend --tail=20
           fi
@@ -298,9 +298,9 @@ jobs:
           FRONTEND_INTERNAL_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/ || echo "Failed")
 
           if [[ "$FRONTEND_INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "✅ Internal frontend health check: PASSED with status $FRONTEND_INTERNAL_STATUS"
+            echo "[PASSED] Internal frontend health check: PASSED with status $FRONTEND_INTERNAL_STATUS"
           else
-            echo "❌ Internal frontend health check: FAILED with status $FRONTEND_INTERNAL_STATUS"
+            echo "[FAILED] Internal frontend health check: FAILED with status $FRONTEND_INTERNAL_STATUS"
             kubectl exec env-healthcheck -- curl -v http://${{ steps.env.outputs.prefix }}leap25-frontend.default.svc.cluster.local:80/
           fi
 
@@ -311,9 +311,9 @@ jobs:
           BACKEND_EXTERNAL_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" -k https://$BACKEND_DOMAIN/health/live --connect-timeout 10 || echo "Failed")
 
           if [[ "$BACKEND_EXTERNAL_STATUS" == "200" ]]; then
-            echo "✅ External backend ingress check: PASSED"
+            echo "[PASSED] External backend ingress check: PASSED"
           else
-            echo "⚠️ External backend ingress check: NO RESPONSE or FAILED with status $BACKEND_EXTERNAL_STATUS"
+            echo "[FAILED] External backend ingress check: NO RESPONSE or FAILED with status $BACKEND_EXTERNAL_STATUS"
             echo "This might be expected if DNS hasn't propagated yet or certificates aren't ready"
             kubectl get ingress | grep backend
             kubectl describe ingress ${{ steps.env.outputs.prefix }}leap25-backend-ingress
@@ -327,9 +327,9 @@ jobs:
           FRONTEND_EXTERNAL_STATUS=$(kubectl exec env-healthcheck -- curl -s -o /dev/null -w "%{http_code}" -k https://$FRONTEND_DOMAIN/ --connect-timeout 10 || echo "Failed")
 
           if [[ "$FRONTEND_EXTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "✅ External frontend ingress check: PASSED with status $FRONTEND_EXTERNAL_STATUS"
+            echo "[PASSED] External frontend ingress check: PASSED with status $FRONTEND_EXTERNAL_STATUS"
           else
-            echo "⚠️ External frontend ingress check: NO RESPONSE or FAILED with status $FRONTEND_EXTERNAL_STATUS"
+            echo "[FAILED] External frontend ingress check: NO RESPONSE or FAILED with status $FRONTEND_EXTERNAL_STATUS"
             echo "This might be expected if DNS hasn't propagated yet or certificates aren't ready"
             kubectl get ingress | grep frontend
             kubectl describe ingress ${{ steps.env.outputs.prefix }}leap25-frontend-ingress
@@ -365,6 +365,6 @@ jobs:
 
           # only fail if internal checks failed
           if [[ "$BACKEND_INTERNAL_STATUS" != "200" ]] || [[ ! "$FRONTEND_INTERNAL_STATUS" =~ ^(200|301|302)$ ]]; then
-            echo "❌ Environment deployment verification failed - internal service checks failed"
+            echo "[FAILED] Environment deployment verification failed - internal service checks failed"
             exit 1
           fi
