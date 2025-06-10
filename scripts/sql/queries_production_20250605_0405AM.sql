@@ -47,7 +47,7 @@ join events on events.id = registrations.event_id
 where events.id = 8;
 
 
-select id, name from users where email = 'candice_fernandez@dlsu.edu.ph';
+select id, name from users where email = '@dlsu.edu.ph';
 
 -- - shana_haw@dlsu.edu.ph
 -- - jasmine_guerrero@dlsu.edu.ph

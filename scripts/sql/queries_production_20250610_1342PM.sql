@@ -47,7 +47,7 @@ join events on events.id = registrations.event_id
 where events.id = 8;
 
 
-select id, name from users where email = '@dlsu.edu.ph';
+select id, name from users where email = 'candice_fernandez@dlsu.edu.ph';
 
 -- - shana_haw@dlsu.edu.ph
 -- - jasmine_guerrero@dlsu.edu.ph
@@ -63,15 +63,27 @@ select * from events;
 
 select * from registrations;
 
+-- filter events that has 1 available slots left
+select events.id, events.title as event_title, events.code, events.max_slots, events.registered_slots
+from events
+where (events.max_slots - events.registered_slots) = 1;
+
+-- show ALL CLOSED events
+select 
+    -- count(*)
+    events.id, events.title as event_title, events.code, events.max_slots, events.registered_slots
+from events
+where events.registered_slots >= events.max_slots; 
+ 
 
 -- grep event by title (also checks if it is in registrations table, and actual_registered_count)
 select 
     events.id as event_id,
     events.title as event_title,
-    subthemes.title as subtheme_title,
     events.code,
     events.max_slots,
     events.registered_slots,
+    (events.max_slots - events.registered_slots) as available_slots,
     case 
     when exists (
         select 1
@@ -79,19 +91,31 @@ select
         where registrations.event_id = events.id
     ) then 'true' else 'false'
     end as is_in_registrations_table,
+    subthemes.title as subtheme_title,
     events.gforms_url
 from events 
 join subthemes on events.subtheme_id = subthemes.id
-where events.title like '%Song%';
+where events.title like '%comedy%';
 
-select id as event_id, title as event_title, code, max_slots, registered_slots from events where code like '%S1053%';
+-- NOTE: events that are "not automatic" incrementing (maybe)
+-- event_id = 70 | Dance into the Night Away | S1201
+-- event_id = 78 | Skybound Strokes: Painting a World Without Limits | S1004
+-- event_id = 24 | PalAUrong Pinoy | S1069
+-- event_id = 48 | Board with Sputnik: Destination Neverland (Onsite) | S1022
+-- event_id = 52 | Board with Sputnik: Destination Neverland (Off-Campus) | S1019
+
+select users.id, users.name, users.email, events.title, events.code, events.schedule, events.venue 
+from events
+join registrations on registrations.event_id = events.id
+join users on registrations.user_id = users.id
+where users.id = 1
+
+select id as event_id, title as event_title, code, max_slots, registered_slots from events where code like '%S1096%';
 
 -- simple check for slot updater (to check event id of what to update)
-select id as event_id, title as event_title, code, max_slots, registered_slots from events where id = 73;
+select id as event_id, title as event_title, code, max_slots, registered_slots from events where id = 24 or id = 78 or id = 70;
 -- slot updater
-update events set registered_slots = 30 where id = 73;
-update events set max_slots = 60 where id = 10;
-update events set max_slots = 60 where id = 73;
+update events set registered_slots = 815 where id = 15;
 
 update events set registered_slots = 84 where id = 20;
 update events set max_slots = 84 where id = 20;
@@ -211,7 +235,7 @@ where registrations.event_id = 6;
 
 
 select * from users where id = 3963;
-select id, google_id, email, name, created_at, updated_at from users where email like 'casey_oreta%';
+select id, google_id, email, name, created_at, updated_at from users where email like 'name%';
 
 select * from users;
 describe users;
@@ -225,7 +249,7 @@ SELECT
 FROM 
     (SELECT 'email' AS email
      UNION ALL SELECT 'email'
-     UNION ALL SELECT '@dlsu.edu.ph') AS email_list
+     UNION ALL SELECT 'email@dlsu.edu.ph') AS email_list
 LEFT JOIN 
     users ON users.email = email_list.email;
 
